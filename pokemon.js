@@ -1,57 +1,25 @@
 const fs = require('fs').promises;
 
-const calculateBMI = (weight, height) => {
-  const heightInMeters = height / 10; // from decimetres to meters
-  const weightInKilograms = weight / 10; // from hectograms to kilograms
-  return +(weightInKilograms / (heightInMeters * heightInMeters)).toFixed(3);
+const getAllPokemon = async () => {
+  let allPokemon = [];
+
+  try {
+    let nextUrl = 'https://pokeapi.co/api/v2/pokemon';
+
+    do { //the API returns 20 pokemon per call
+      const response = await fetch(nextUrl);
+      //results: array of pokemon data, next: url for next batch -> https://pokeapi.co/api/v2/pokemon?limit=${batchSize}&offset=${offset}
+      const { results, next } = await response.json();
+      
+      allPokemon.push(...results);
+      nextUrl = next;
+    } while (nextUrl)
+  } catch (error) {
+    console.error('Error fetching Pokemon data:', error);
+  }
+
+  return allPokemon;
 };
-  const getAllPokemon = async () => {
-    const cacheFilePath = 'pokemon_cache.json';
-    let allPokemon = [];
-  
-    try {
-      // Check if the cache file exists
-      const cacheData = await fs.readFile(cacheFilePath, 'utf8');
-      allPokemon = JSON.parse(cacheData);
-      console.log('Data loaded from cache.');
-    } catch (error) {
-      console.log('Cache file not found. Fetching data from the API...');
-    }
-  
-    if (allPokemon.length === 0) {
-      let offset = 0;
-      const batchSize = 100;
-  
-      while (true) {
-        try {
-          const url = `https://pokeapi.co/api/v2/pokemon?limit=${batchSize}&offset=${offset}`;
-          const response = await fetch(url);
-          const { results, next } = await response.json();
-  
-          allPokemon.push(...results);
-  
-          if (!next) {
-            // If there are no more results, break the loop
-            break;
-          }
-  
-          // Increment the offset for the next batch of data
-          offset += batchSize;
-        } catch (error) {
-          console.error('Error fetching Pokemon data:', error);
-          break;
-        }
-      }
-  
-      // Save the fetched data to the cache file
-      const jsonData = JSON.stringify(allPokemon, null, 2);
-      await fs.writeFile(cacheFilePath, jsonData, 'utf8');
-      console.log('Data saved to cache.');
-    }
-  
-    return allPokemon;
-  };
-  
 
 (async () => {
   try {
@@ -62,17 +30,15 @@ const calculateBMI = (weight, height) => {
 
     const pokemonDataList = await Promise.all(pokemonDataPromises);
 
-    // Filter Pokemon with game index version names "Red", "Blue," "LeafGreen," and "White"
-    const redBlueLeafGreenWhitePokemon = pokemonDataList.filter((pokemonData) =>
-      pokemonData.game_indices.some(
-        (gameIndex) =>
-          ['red', 'blue', 'leafgreen', 'white'].includes(gameIndex.version.name)
-      )
+    const isAllowedVersion = (gameIndex) => ['red', 'blue', 'leafgreen', 'white'].includes(gameIndex.version.name);
+    
+    const allowedPokemon = pokemonDataList.filter((pokemonData) =>
+      pokemonData.game_indices.some(isAllowedVersion)
     );
-
-    const allPokemonData = redBlueLeafGreenWhitePokemon.map((pokemonData) => {
-      const typeSlot1 = pokemonData.types.find((type) => type.slot === 1)?.type.name || null;
+    const allPokemonData = allowedPokemon.map((pokemonData) => {
+      const typeSlot1 = pokemonData.types.find((type) => type.slot === 1)?.type.name;
       const typeSlot2 = pokemonData.types.find((type) => type.slot === 2)?.type.name || null;
+      const version = pokemonData.game_indices.filter(isAllowedVersion).map((gameIndex) => gameIndex.version.name);
 
       return {
         id: pokemonData.id,
@@ -85,9 +51,7 @@ const calculateBMI = (weight, height) => {
         spriteUrl: pokemonData.sprites.front_default,
         typeSlot1: typeSlot1,
         typeSlot2: typeSlot2,
-        versions: pokemonData.game_indices
-          .filter((gameIndex) => ['red', 'blue', 'leafgreen', 'white'].includes(gameIndex.version.name))
-          .map((gameIndex) => gameIndex.version.name),
+        versions: version,
       };
     });
 
@@ -101,6 +65,12 @@ const calculateBMI = (weight, height) => {
     console.error('Error fetching Pokemon data:', error);
   }
 })();
+
+const calculateBMI = (weight, height) => {
+  const heightInMeters = height / 10; // from decimetres to meters
+  const weightInKilograms = weight / 10; // from hectograms to kilograms
+  return +(weightInKilograms / (heightInMeters * heightInMeters)).toFixed(3);
+};
 
 module.exports = {
   calculateBMI,
